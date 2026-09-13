@@ -1,1 +1,0 @@
-{"buildCommand": "cd meridian-dental/frontend && npm install && npm run build", "outputDirectory": "meridian-dental/frontend/.next", "framework": "nextjs"}
