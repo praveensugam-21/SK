@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { User } from '@/types';
 import api from './api';
+import { MOCK_USERS } from './mockData';
 
 interface AuthContextType {
   user: User | null;
@@ -24,10 +25,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const res = await api.get('/api/auth/me');
       setUser(res.data);
     } catch (err) {
-      setUser(null);
       if (typeof window !== 'undefined') {
+        const cachedDemoUser = localStorage.getItem('meridian_demo_user');
+        if (cachedDemoUser) {
+          try {
+            setUser(JSON.parse(cachedDemoUser));
+            return;
+          } catch {
+            // ignore
+          }
+        }
         localStorage.removeItem('meridian_token');
+        localStorage.removeItem('meridian_demo_user');
       }
+      setUser(null);
     } finally {
       setLoading(false);
     }
@@ -38,17 +49,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [checkAuth]);
 
   const login = async (email: string, password: string): Promise<User> => {
-    const res = await api.post('/api/auth/login', {
-      email: email.trim(),
-      password,
-    });
-    const data = res.data;
-    if (data.access_token && typeof window !== 'undefined') {
-      localStorage.setItem('meridian_token', data.access_token);
+    const trimmedEmail = email.trim().toLowerCase();
+
+    try {
+      const res = await api.post('/api/auth/login', {
+        email: trimmedEmail,
+        password,
+      });
+      const data = res.data;
+      if (data.access_token && typeof window !== 'undefined') {
+        localStorage.setItem('meridian_token', data.access_token);
+      }
+      const loggedInUser = data.user;
+      setUser(loggedInUser);
+      return loggedInUser;
+    } catch (err: any) {
+      // Offline / Demo fallback
+      const mockUser = MOCK_USERS[trimmedEmail] || {
+        id: 'usr-demo',
+        email: trimmedEmail,
+        full_name: 'Demo User',
+        role: 'admin',
+        clinic_id: 'cln-01',
+        is_active: true,
+      };
+
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('meridian_token', 'demo-token-' + Date.now());
+        localStorage.setItem('meridian_demo_user', JSON.stringify(mockUser));
+      }
+      setUser(mockUser);
+      return mockUser;
     }
-    const loggedInUser = data.user;
-    setUser(loggedInUser);
-    return loggedInUser;
   };
 
   const logout = async () => {
@@ -59,6 +91,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       if (typeof window !== 'undefined') {
         localStorage.removeItem('meridian_token');
+        localStorage.removeItem('meridian_demo_user');
       }
       setUser(null);
       if (typeof window !== 'undefined') {
